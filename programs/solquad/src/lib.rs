@@ -39,16 +39,22 @@ pub mod solquad {
     pub fn add_project_to_pool(ctx: Context<AddProjectToPool>) -> Result<()> {
         let escrow_account = &mut ctx.accounts.escrow_account;
         let pool_account = &mut ctx.accounts.pool_account;
-        let project_account = &ctx.accounts.project_account;
+        let project_account = &mut ctx.accounts.project_account;
+
+        if project_account.in_pool {
+            return Err(Error::from(ProgramError::AccountAlreadyInitialized));
+        }
 
         pool_account.projects.push(
             project_account.project_owner
         );
         pool_account.total_projects += 1;
 
-        escrow_account.project_reciever_addresses.push(
+        escrow_account.project_receiver_addresses.push(
             project_account.project_owner
         );
+
+        project_account.in_pool = true;
 
         Ok(())
     }
@@ -74,7 +80,7 @@ pub mod solquad {
         let pool_account = &mut ctx.accounts.pool_account;
         let project_account = &mut ctx.accounts.project_account;
   
-        for i in 0..escrow_account.project_reciever_addresses.len() {
+        for i in 0..escrow_account.project_receiver_addresses.len() {
             let distributable_amt: u64;
             let votes: u64;
 
@@ -86,7 +92,7 @@ pub mod solquad {
             }
 
             if votes != 0 {
-                distributable_amt = (votes / pool_account.total_votes) * escrow_account.creator_deposit_amount as u64;
+                distributable_amt = (votes.checked_div(pool_account.total_votes).unwrap()).checked_mul(escrow_account.creator_deposit_amount as u64).unwrap();
             } else {
                 distributable_amt = 0;
             }
@@ -182,7 +188,7 @@ pub struct Escrow {
     pub escrow_creator: Pubkey,
     pub creator_deposit_amount: u64,
     pub total_projects: u8,
-    pub project_reciever_addresses: Vec<Pubkey>,
+    pub project_receiver_addresses: Vec<Pubkey>,
 }
 
 // Pool for each project 
@@ -202,6 +208,7 @@ pub struct Project {
     pub votes_count: u64,
     pub voter_amount: u64,
     pub distributed_amt: u64,
+    pub in_pool: bool,
 }
 
 // Voters voting for the project
